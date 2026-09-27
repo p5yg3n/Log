@@ -1,100 +1,103 @@
-# Godot 4 Advanced Logger (`Log`)
+# Godot 4 Advanced Logger Utility (Log)
 
-A thread-safe, feature-rich logging utility for Godot 4. This static helper class supports tiered log levels, category allowlisting, colored rich console printing, asynchronous file output, automatic log rotation, and safe crash handling.
+A high-performance, thread-safe, and feature-rich logging utility for Godot 4. Designed with static methods for clean global access (`Log.info("Tag", "Message")`), it features rich console formatting, file persistence with automatic rotation, and flexible category filtering.
 
-## Features
+---
 
-* **Thread-Safe:** Uses a global `Mutex` lock to ensure concurrent threads can log safely without race conditions.
-* **Tiered Log Levels:** Filter messages by severity (`DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL`).
-* **Category Filtering:** Opt-in category allowlisting lets you toggle specific systems (e.g., `"Physics"`, `"Network"`, `"AI"`) on and off dynamically.
-* **Rich Console Output:** Leverages Godot's `print_rich` with color-coded BBCode formatting for clear terminal readability.
-* **File Logging & Rotation:** Automatically writes logs to disk (`user://debug.log`), rotating backups when file size limits are reached.
-* **Fatal Error Handlers:** Gracefully closes file handles and triggers an assertion or runtime crash based on whether you are running in the editor or an exported build.
+## ✨ Features
 
+* **Global Static API:** Clean, intuitive syntax (`Log.info("Player", "Jumped!")`) accessible from anywhere in your project without needing references or instantiation.
+* **Severity Levels:** Supports `DEBUG`, `INFO`, `WARN`, `ERROR`, and `FATAL` tiers with custom verbosity control (`min_level`).
+* **Thread-Safe:** Fully protected by a `Mutex`, ensuring safe logging even if you run tasks across multiple threads.
+* **Rich Console Formatting:** Automatically color-codes output in the Godot editor console using `print_rich` based on severity.
+* **File Logging & Auto-Rotation:** Optional persistence to `user://debug.log` with built-in file size management that automatically rotates old logs to `.old` backups.
+* **Category Allowlists & Blocklists:** Easily isolate or mute specific systems (e.g., isolate `"Physics"` or mute noisy `"Audio"` logs).
+* **Safe Fatal Crash Handling:** Automatically flushes logs, closes files, and safely triggers an engine crash or editor assertion on fatal errors.
 
-## Installation & Setup
+---
 
-1. Place `Log.gd` into your project scripts folder (e.g., `res://scripts/core/Log.gd`).
-2. Because all methods and configurations are `static`, you can access `Log` globally from anywhere in your project without needing an Autoload singleton instance.
+## 📦 Installation & Setup
 
+1. Create a folder in your project directory (e.g., `res://scripts/utils/`).
+2. Add the core script file: `log.gd`.
 
-## Usage Guide
+---
+
+## 🚀 Usage Guide
 
 ### 1. Basic Logging
 
-Call the appropriate method based on the severity of the message, passing a category tag and a log string:
+Call the logger globally from any script using a category string and your message:
 
 ```gdscript
-Log.debug("Player", "Player velocity initialized to zero.")
+Log.debug("Physics", "Raycast hit ground at position: %s" % hit_pos)
 Log.info("GameManager", "Level 1 loaded successfully.")
-Log.warn("Audio", "Missing sound asset for footsteps.")
-Log.error("Inventory", "Failed to parse item ID 404.")
+Log.warn("Inventory", "Attempted to add item to a full slot.")
+Log.error("Network", "Failed to connect to server: Timeout.")
+
+# Fatal will log, close files, and crash/assert the application
+if not critical_resource:
+	Log.fatal("Core", "Missing critical config resource!")
 
 ```
 
-### 2. Category Filtering (Allowlisting)
+### 2. Enabling File Logging
 
-By default, all categories pass through if `enabled_categories` is empty. You can restrict logging to specific debug channels:
-
-```gdscript
-# Enable only specific systems
-Log.enable_category("Network")
-Log.enable_category("Physics")
-
-# Later, to disable a category
-Log.disable_category("Physics")
-
-```
-
-### 3. Enabling File Output
-
-To write logs to a file on disk, toggle `write_to_file` and optionally customize the path or file size threshold:
+By default, logging to a file is disabled to keep disk writes minimal during development. You can enable it globally (e.g., in an AutoLoad script or your main scene's `_ready()`):
 
 ```gdscript
 func _ready() -> void:
 	Log.write_to_file = true
-	Log.log_file_path = "user://my_game_debug.log"
+	Log.log_file_path = "user://game_session.log"
 	Log.max_file_size_bytes = 5 * 1024 * 1024 # 5 MB limit before rotation
 
 ```
 
-### 4. Handling Fatal Errors
+### 3. Filtering Categories (Allowlist & Blocklist)
 
-Triggering a fatal log will print the error, close file streams safely, and trigger an engine assertion (in-editor) or crash (in release builds):
+If you are debugging a specific subsystem, you can restrict logs to only show specific categories, or mute ones that are spamming your console:
 
 ```gdscript
-if not critical_resource_loaded:
-	Log.fatal("Core", "Essential configuration file is missing! Shutting down.")
+# ONLY show logs from these categories (Allowlist)
+Log.enable_category("Combat")
+Log.enable_category("AI")
+
+# OR mute specific noisy categories (Blocklist)
+Log.mute_category("Audio")
+Log.mute_category("Particles")
 
 ```
 
+---
 
-## Script Reference
+## 📚 Script Reference
 
-### Configuration Variables
+### `Log.gd`
 
-| Variable | Type | Default | Description |
+The global static logging utility class.
+
+| Property | Type | Default | Description |
 | --- | --- | --- | --- |
-| `min_level` | `Level` | `Level.DEBUG` | Minimum threshold level required for a message to print or write. |
-| `enabled_categories` | `Dictionary` | `{}` | Allowlist dictionary for specific category tags. Empty allows all. |
-| `write_to_file` | `bool` | `false` | Master toggle to enable writing log output to a file. |
-| `log_file_path` | `String` | `"user://debug.log"` | Target path for the log file. |
-| `max_file_size_bytes` | `int` | `2 * 1024 * 1024` | Maximum file size (2 MB) before triggering log rotation (`.old`). |
-
-### Static Methods
+| `min_level` | `Level` | `Level.DEBUG` | Minimum severity level required to trigger output. |
+| `write_to_file` | `bool` | `false` | When `true`, duplicates log messages to a persistent file. |
+| `log_file_path` | `String` | `"user://debug.log"` | Target path for file logging. |
+| `max_file_size_bytes` | `int` | `2 * 1024 * 1024` | Maximum file size (in bytes) before triggering a log rotation. |
 
 | Method | Description |
 | --- | --- |
-| `debug(cat, msg)` | Logs a `DEBUG` level message. |
-| `info(cat, msg)` | Logs an `INFO` level message. |
-| `warn(cat, msg)` | Logs a `WARN` level message and pushes to the editor warning console. |
-| `error(cat, msg)` | Logs an `ERROR` level message and pushes to the editor error console. |
-| `fatal(cat, msg)` | Logs a `FATAL` message, closes logs, and safely terminates/asserts. |
-| `enable_category(cat)` | Adds a category tag to the active allowlist. |
-| `disable_category(cat)` | Removes a category tag from the allowlist. |
-| `close_log_file()` | Safely flushes and closes active file handlers. |
+| `Log.debug(cat, msg)` | Logs a low-priority debug message. |
+| `Log.info(cat, msg)` | Logs standard runtime information. |
+| `Log.warn(cat, msg)` | Logs a warning and pushes a yellow alert to the editor console. |
+| `Log.error(cat, msg)` | Logs an error and pushes a red alert to the editor console. |
+| `Log.fatal(cat, msg)` | Logs a critical failure, flushes files, and triggers a crash/assert. |
+| `Log.enable_category(cat)` | Adds a category to the allowlist. |
+| `Log.disable_category(cat)` | Removes a category from the allowlist. |
+| `Log.mute_category(cat)` | Adds a category to the blocklist (mutes it). |
+| `Log.unmute_category(cat)` | Removes a category from the blocklist. |
+| `Log.close_log_file()` | Safely flushes and closes the active file stream. |
 
+---
 
-## License
+## 📝 License
 
-Distributed under the MIT License. Feel free to use and customize for your Godot projects.
+Distributed under the MIT License. Feel free to use this in your own personal or commercial Godot projects.

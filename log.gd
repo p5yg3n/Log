@@ -3,7 +3,12 @@ class_name Log
 enum Level { DEBUG, INFO, WARN, ERROR, FATAL }
 
 static var min_level: Level = Level.DEBUG
+
+## If populated, ONLY these categories will be logged (Allowlist).
 static var enabled_categories: Dictionary = {}
+## If populated, THESE categories will be ignored (Blocklist).
+static var disabled_categories: Dictionary = {}
+
 static var write_to_file: bool = false
 static var log_file_path: String = "user://debug.log"
 static var max_file_size_bytes: int = 2 * 1024 * 1024
@@ -11,21 +16,28 @@ static var max_file_size_bytes: int = 2 * 1024 * 1024
 static var _file: FileAccess = null
 static var _mutex: Mutex = Mutex.new()
 
+
 ## Logs a debug-level message.
-static func debug(cat: String, msg: String) -> void: _log(Level.DEBUG, cat, msg)
+static func debug(cat: String, msg: String) -> void: 
+	_log(Level.DEBUG, cat, msg)
+
 
 ## Logs an info-level message.
-static func info(cat: String, msg: String) -> void: _log(Level.INFO, cat, msg)
+static func info(cat: String, msg: String) -> void: 
+	_log(Level.INFO, cat, msg)
+
 
 ## Logs a warn-level message and pushes to the editor console.
 static func warn(cat: String, msg: String) -> void:
 	_log(Level.WARN, cat, msg)
 	push_warning("[%s] %s" % [cat, msg])
 
+
 ## Logs an error-level message and pushes to the editor console.
 static func error(cat: String, msg: String) -> void:
 	_log(Level.ERROR, cat, msg)
 	push_error("[%s] %s" % [cat, msg])
+
 
 ## Logs a fatal-level message, closes the log file, and crashes the game.
 static func fatal(cat: String, msg: String) -> void:
@@ -37,9 +49,19 @@ static func fatal(cat: String, msg: String) -> void:
 	else:
 		OS.crash("FATAL: [%s] %s" % [cat, msg])
 
+
 ## Internal logging method that handles formatting and filtering.
 static func _log(level: Level, cat: String, msg: String) -> void:
-	if level < min_level or (not enabled_categories.is_empty() and not enabled_categories.has(cat)):
+	# Check minimum severity level
+	if level < min_level:
+		return
+	
+	# Check blocklist
+	if disabled_categories.has(cat):
+		return
+
+	# Check allowlist (if enabled_categories has items, the category must be present)
+	if not enabled_categories.is_empty() and not enabled_categories.has(cat):
 		return
 
 	_mutex.lock()
@@ -53,17 +75,23 @@ static func _log(level: Level, cat: String, msg: String) -> void:
 		_write("[%s-%02d-%02d %s] [%s] %s: %s" % [dt.year, dt.month, dt.day, ts, lvl_str, cat, msg])
 	_mutex.unlock()
 
+
 ## Returns the UI color string corresponding to the log level.
 static func _get_color(level: Level) -> String:
 	return ["gray", "white", "yellow", "red", "darkred"][level]
 
-## Internal method to write messages to the log file.
+
+## Internal method to safely write messages to the log file with robust creation handling.
 static func _write(line: String) -> void:
 	if not _file:
-		_file = FileAccess.open(log_file_path, FileAccess.READ_WRITE)
-		if _file:
-			_file.seek_end()
+		if FileAccess.file_exists(log_file_path):
+			_file = FileAccess.open(log_file_path, FileAccess.READ_WRITE)
+			if _file:
+				_file.seek_end()
 		else:
+			_file = FileAccess.open(log_file_path, FileAccess.WRITE)
+			
+		if not _file:
 			return
 
 	if _file.get_length() >= max_file_size_bytes:
@@ -71,6 +99,7 @@ static func _write(line: String) -> void:
 
 	_file.store_line(line)
 	_file.flush()
+
 
 ## Rotates log files by renaming the current log to .old and creating a new one.
 static func _rotate() -> void:
@@ -89,6 +118,7 @@ static func _rotate() -> void:
 	dir.rename(log_file_path, backup)
 	_file = FileAccess.open(log_file_path, FileAccess.WRITE)
 
+
 ## Safely closes the log file.
 static func close_log_file() -> void:
 	_mutex.lock()
@@ -97,8 +127,22 @@ static func close_log_file() -> void:
 		_file = null
 	_mutex.unlock()
 
+
 ## Adds a category to the allowlist for logging.
-static func enable_category(cat: String) -> void: enabled_categories[cat] = true
+static func enable_category(cat: String) -> void: 
+	enabled_categories[cat] = true
+
 
 ## Removes a category from the allowlist.
-static func disable_category(cat: String) -> void: enabled_categories.erase(cat)
+static func disable_category(cat: String) -> void: 
+	enabled_categories.erase(cat)
+
+
+## Adds a category to the blocklist (mutes it).
+static func mute_category(cat: String) -> void:
+	disabled_categories[cat] = true
+
+
+## Removes a category from the blocklist.
+static func unmute_category(cat: String) -> void:
+	disabled_categories.erase(cat)
